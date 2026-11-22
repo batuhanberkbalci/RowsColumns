@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}{{ 'New location' if mode == 'create' else 'Edit location' }}{% endblock %}
+
+{% macro field_error(field) %}
+  {% if errors.get(field) %}<div class="invalid-feedback d-block">{{ errors[field] }}</div>{% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1 class="h3 mb-0">{{ 'New location' if mode == 'create' else 'Edit location' }}</h1>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('locations.index') }}">&larr; Back to locations</a>
+    </div>
+
+    {% if errors %}
+    <div class="alert alert-danger">Please fix the highlighted fields and try again.</div>
+    {% endif %}
+
+    {% if stale_manager %}
+    <div class="alert alert-warning">
+      The assigned Lab Manager <strong>{{ stale_manager }}</strong> is no longer an approved, active
+      Lab Manager. Choose a new one below, or leave the location unassigned.
+    </div>
+    {% endif %}
+
+    <form method="post" novalidate
+          action="{{ url_for('locations.create') if mode == 'create' else url_for('locations.edit', location_id=location_id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header fw-semibold">Details</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label" for="name">Name <span class="text-danger">*</span></label>
+              <input class="form-control {{ 'is-invalid' if errors.get('name') }}" type="text" id="name"
+                     name="name" maxlength="100" required value="{{ state.name }}">
+              {{ field_error('name') }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="location_type">Type <span class="text-danger">*</span></label>
+              <select class="form-select {{ 'is-invalid' if errors.get('location_type') }}" id="location_type" name="location_type">
+                <option value="lab" {% if state.location_type == 'lab' %}selected{% endif %}>Lab</option>
+                <option value="studio" {% if state.location_type == 'studio' %}selected{% endif %}>Studio</option>
+              </select>
+              {{ field_error('location_type') }}
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="address">Address <span class="text-danger">*</span></label>
+              <input class="form-control {{ 'is-invalid' if errors.get('address') }}" type="text" id="address"
+                     name="address" maxlength="255" required value="{{ state.address }}"
+                     placeholder="Building, room, street, district">
+              {{ field_error('address') }}
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="description">Description</label>
+              <textarea class="form-control {{ 'is-invalid' if errors.get('description') }}" id="description"
+                        name="description" rows="3" maxlength="1000">{{ state.description }}</textarea>
+              {{ field_error('description') }}
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="lab_manager_id">Lab manager</label>
+              <select class="form-select {{ 'is-invalid' if errors.get('lab_manager_id') }}" id="lab_manager_id" name="lab_manager_id">
+                <option value="">&mdash; Unassigned &mdash;</option>
+                {% for m in managers %}
+                  <option value="{{ m.user_id }}" {% if state.lab_manager_id == m.user_id|string %}selected{% endif %}>
+                    {{ m.full_name }} ({{ m.email }})
+                  </option>
+                {% endfor %}
+              </select>
+              {{ field_error('lab_manager_id') }}
+              {% if not managers %}
+                <div class="form-text">No approved Lab Managers in your organization yet.</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header fw-semibold">Opening hours</div>
+        <div class="card-body">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr><th>Day</th><th>Closed</th><th>Opens</th><th>Closes</th></tr>
+            </thead>
+            <tbody>
+              {% for h in state.hours %}
+              <tr data-day-row>
+                <td class="fw-medium">{{ day_names[h.weekday] }}</td>
+                <td>
+                  <div class="form-check">
+                    <input class="form-check-input js-closed" type="checkbox" id="closed_{{ h.weekday }}"
+                           name="closed_{{ h.weekday }}" {% if h.closed %}checked{% endif %}>
+                    <label class="form-check-label" for="closed_{{ h.weekday }}">Closed</label>
+                  </div>
+                </td>
+                <td>
+                  <input class="form-control form-control-sm js-time {{ 'is-invalid' if errors.get('hours_' ~ h.weekday) }}"
+                         type="time" name="opens_{{ h.weekday }}" value="{{ h.opens }}"
+                         aria-label="{{ day_names[h.weekday] }} opening time">
+                </td>
+                <td>
+                  <input class="form-control form-control-sm js-time {{ 'is-invalid' if errors.get('hours_' ~ h.weekday) }}"
+                         type="time" name="closes_{{ h.weekday }}" value="{{ h.closes }}"
+                         aria-label="{{ day_names[h.weekday] }} closing time">
+                </td>
+              </tr>
+              {% if errors.get('hours_' ~ h.weekday) %}
+              <tr><td colspan="4" class="text-danger small pt-0">{{ errors['hours_' ~ h.weekday] }}</td></tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">{{ 'Create location' if mode == 'create' else 'Save changes' }}</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('locations.index') }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Disable the time inputs of a day marked "Closed".
+  document.querySelectorAll('tr[data-day-row]').forEach(function (row) {
+    var closed = row.querySelector('.js-closed');
+    var times = row.querySelectorAll('.js-time');
+    function sync() { times.forEach(function (t) { t.disabled = closed.checked; }); }
+    closed.addEventListener('change', sync);
+    sync();
+  });
+</script>
+{% endblock %}
